@@ -1,9 +1,8 @@
 # Project exclude paths
-/target/
-/.idea
-/.embuild
-*.iml
 /rrr-embedded/target/
 /rrr-frontend/target/
 /rrr-embedded/wifi-password.secret
 /rrr-embedded/wifi-ssid.secret
+/rrr-embedded/.embuild/
+/rrr-frontend/dist/
+/.idea/
