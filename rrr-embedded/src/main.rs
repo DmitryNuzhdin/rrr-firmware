@@ -1,34 +1,43 @@
 mod led_driver;
+mod api;
+mod ota;
+mod wifi;
+mod server;
 
 use crate::led_driver::LedDriver;
-
+use crate::ota::OtaDriver;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
+use std::thread;
 use log::*;
 use anyhow::Result;
+use embedded_svc::http::server::Connection;
+use embedded_svc::io::Read;
 use embedded_svc::wifi::*;
+use esp_idf_hal::adc::{ADC1, AdcChannelDriver, Atten11dB};
+use esp_idf_hal::adc::config::Resolution;
 
 use esp_idf_svc::eventloop::*;
 use esp_idf_svc::wifi::*;
-
-use esp_idf_hal::peripheral;
-use esp_idf_hal::i2c::I2cDriver;
 use esp_idf_hal::peripheral::Peripheral;
 use esp_idf_hal::prelude::*;
-use esp_idf_hal::delay::FreeRtos;
-
+use esp_idf_hal::gpio::{Gpio1};
+use esp_idf_hal::ledc;
+use esp_idf_hal::ledc::{LedcDriver, LedcTimerDriver};
+use esp_idf_hal::ledc::config::TimerConfig;
 use max170xx::Max17048;
+use crate::api::{Command, WifiConnectionConfiguration, WifiConnectionType};
+use crate::server::Server;
+use crate::wifi::WiFi;
 
-
-const SSID: &str = include_str!("../wifi-ssid.secret");
-const PASS: &str = include_str!("../wifi-password.secret");
-const INDEX: &[u8] = include_bytes!("../../rrr-frontend/dist/index.html.gz");
-const CSS: &[u8] = include_bytes!("../../rrr-frontend/dist/index.css.gz");
-const WASM: &[u8] = include_bytes!("../../rrr-frontend/dist/rrr-frontend_bg.wasm.gz");
-const JS: &[u8] = include_bytes!("../../rrr-frontend/dist/rrr-frontend.js.gz");
+static SSID: &str = include_str!("../wifi-ssid.secret");
+static PASS: &str = include_str!("../wifi-password.secret");
 
 fn main() -> Result<()> {
     esp_idf_sys::link_patches();
     esp_idf_svc::log::EspLogger::initialize_default();
+
+    let state = Arc::new(Mutex::new(api::State::default()));
 
     let peripherals = Peripherals::take().unwrap();
     let sysloop = EspSystemEventLoop::take()?;
@@ -40,11 +49,71 @@ fn main() -> Result<()> {
         &esp_idf_hal::i2c::I2cConfig::default(),
     )?;
 
+    let _pyro = esp_idf_hal::gpio::PinDriver::output(peripherals.pins.gpio6)?;
+
+
+    let timer_driver =
+        LedcTimerDriver::new(
+            peripherals.ledc.timer0,
+            &TimerConfig::default()
+            .frequency(50.Hz().into())
+            .resolution( ledc::Resolution::Bits14)
+        )?;
+    let mut pwm_driver = LedcDriver::new(peripherals.ledc.channel0, timer_driver,peripherals.pins.gpio4)?;
+
+    let max_duty = pwm_driver.get_max_duty();
+    pwm_driver.set_duty(max_duty * 15 / 200)?;
+
+
+
     let mut max17048 = Max17048::new(i2c);
 
     max17048.version().unwrap();
     info!("SOC: {:.2}", max17048.soc().unwrap());
     info!("MAX -- OK");
+
+    let max17048 = Arc::new(Mutex::new(max17048));
+
+    esp_idf_hal::task::thread::ThreadSpawnConfiguration {
+        name: Some(b"max-thread\0"),
+        ..Default::default()
+    }.set().unwrap();
+
+    let max1 = max17048.clone();
+    let max2 = max17048.clone();
+
+    let state1 = state.clone();
+    let state2 = state.clone();
+
+    thread::spawn(move || {
+        loop {
+            thread::sleep(Duration::from_millis(1000));
+            let mut state = state1.lock().unwrap();
+            let mut max = max1.lock().unwrap();
+            state.battery.soc = max.soc().unwrap();
+            state.battery.voltage = max.voltage().unwrap();
+            state.battery.charge_rate = max.charge_rate().unwrap();
+        }
+    });
+
+    let mut adc_driver_config = esp_idf_hal::adc::AdcConfig::default();
+    adc_driver_config.resolution = Resolution::Resolution12Bit;
+    adc_driver_config.calibration = true;
+
+    let mut adc_driver = esp_idf_hal::adc::AdcDriver::new(peripherals.adc1, &esp_idf_hal::adc::AdcConfig::default())?;
+    let mut adc_channel_driver: AdcChannelDriver<'_, Gpio1, Atten11dB<ADC1>> = esp_idf_hal::adc::AdcChannelDriver::new(peripherals.pins.gpio1)?;
+
+    adc_driver.read(&mut adc_channel_driver)?;
+
+    thread::spawn(move || {
+        loop {
+            thread::sleep(Duration::from_millis(1000));
+            let adc_reading = adc_driver.read(&mut adc_channel_driver).unwrap();
+            let voltage = adc_reading as f32;
+            let mut state = state2.lock().unwrap();
+            state.pyro.channel1.test_voltage = voltage;
+        }
+    });
 
 
     //Drivers
@@ -52,144 +121,48 @@ fn main() -> Result<()> {
     info!("LED -- OK");
     led_driver.set_rgb(20, 0, 0)?;
 
+    let wifi_configuration = WifiConnectionConfiguration {
+        connection_type: WifiConnectionType::ConnectToExternal,
+        ssid: SSID.into(),
+        password: PASS.into(),
+    };
 
     #[allow(unused_variables)]
-        let wifi = wifi(peripherals.modem, sysloop.clone())?;
-    info!("WIFI -- OK");
-    led_driver.set_rgb(0, 20, 0)?;
+        let wifi = WiFi::new(wifi_configuration, peripherals.modem, sysloop.clone())?;
+
 
     #[allow(unused_variables)]
-        let httpd = httpd(Arc::new(Mutex::new(led_driver)), Arc::new(Mutex::new(max17048)))?;
+        let mut ota_driver = OtaDriver::new()?;
+
+
+    let ld = Arc::new(Mutex::new(led_driver));
+
+    let command_handler = move |c: &Command| -> Result<()> {
+        match c {
+            Command::Reset => {}
+            Command::SetWifi { .. } => {}
+            Command::SetLedColor {r, g, b} =>
+                {ld.lock().unwrap().set_rgb(r.clone(), g.clone(), b.clone())?}
+            _ => {}
+        }
+        Ok(())
+    };
+
+    #[allow(unused_variables)]
+        let server = Server::new(state, command_handler)?;
 
     info!("HTTP server -- OK");
+    info!("mDNS -- OK");
 
     let mut mdns = esp_idf_svc::mdns::EspMdns::take()?;
     mdns.set_hostname("rrr")?;
     mdns.set_instance_name("RRR web server")?;
     mdns.add_service(None, "_http", "_tcp", 80, &[("board", "{esp32}")])?;
 
-    info!("mDNS -- OK");
-
     loop {
-        FreeRtos::delay_ms(1000);
+        thread::sleep(Duration::from_millis(1000));
     }
 
+    #[allow(unreachable_code)]
     Ok(())
-}
-
-fn httpd(led: Arc<Mutex<LedDriver>>, max17048: Arc<Mutex<Max17048<I2cDriver<'static>>>>) -> Result<esp_idf_svc::http::server::EspHttpServer> {
-    use embedded_svc::http::server::{Method};
-    use embedded_svc::io::Write;
-    use esp_idf_svc::http::server::{EspHttpServer};
-
-    let mut server = EspHttpServer::new(&Default::default())?;
-
-    let l1 = led.clone();
-    let l2 = led.clone();
-    let l3 = led.clone();
-    let l4 = led.clone();
-
-    server
-        .fn_handler("/batt", Method::Get, move |req| {
-            req.into_ok_response()?
-                .write_all({
-                    let mut m = max17048.lock().unwrap();
-                    format!(
-                        "Battery charge: {:.2}%, voltage: {:.2}, discharge rate: {:.2}",
-                        m.soc().unwrap(),
-                        m.voltage().unwrap(),
-                        m.charge_rate().unwrap()
-                    ).as_bytes()
-                })?;
-            Ok(())
-        })?
-        .fn_handler("/red", Method::Get, move |req| {
-            req.into_ok_response()?.write_all("RED".as_bytes())?;
-            l1.lock().unwrap().set_rgb(20, 0, 0)?;
-            Ok(())
-        })?
-        .fn_handler("/green", Method::Get, move |req| {
-            req.into_ok_response()?.write_all("GREEN".as_bytes())?;
-            l2.lock().unwrap().set_rgb(0, 20, 0)?;
-            Ok(())
-        })?
-        .fn_handler("/blue", Method::Get, move |req| {
-            req.into_response(200, None, &[("Content-Type", "image/jpg"),
-                ("Content-Encoding", "gzip"),
-                ("Access-Control-Allow-Origin", "*"),
-            ])?.write_all("BLUE".as_bytes())?;
-            l3.lock().unwrap().set_rgb(0, 0, 20)?;
-            Ok(())
-        })?
-        .fn_handler("/off", Method::Get, move |req| {
-            req.into_ok_response()?.write_all("OFF".as_bytes())?;
-            l4.lock().unwrap().off()?;
-            Ok(())
-        })?
-        .fn_handler("/", Method::Get, move |req| {
-            req.into_response(200, None, &[("Content-Type", "text/html"),
-                ("Content-Encoding", "gzip"),
-                ("Access-Control-Allow-Origin", "*"),
-            ])?.write_all(INDEX)?;
-            Ok(())
-        })?
-        .fn_handler("/index.css", Method::Get, move |req| {
-            req.into_response(200, None, &[("Content-Type", "text/css"),
-                ("Content-Encoding", "gzip"),
-                ("Access-Control-Allow-Origin", "*"),
-            ])?.write_all(CSS)?;
-            Ok(())
-        })?
-        .fn_handler("/rrr-frontend_bg.wasm", Method::Get, move |req| {
-            req.into_response(200, None, &[("Content-Type", "application/wasm"),
-                ("Content-Encoding", "gzip"),
-                ("Access-Control-Allow-Origin", "*"),
-            ])?.write_all(WASM)?;
-            Ok(())
-        })?
-        .fn_handler("/rrr-frontend.js", Method::Get, move |req| {
-            req.into_response(200, None, &[("Content-Type", "application/javascript"),
-                ("Content-Encoding", "gzip"),
-                ("Access-Control-Allow-Origin", "*"),
-            ])?.write_all(JS)?;
-            Ok(())
-        })?
-    ;
-
-    Ok(server)
-}
-
-fn wifi(
-    modem: impl peripheral::Peripheral<P=esp_idf_hal::modem::Modem> + 'static,
-    sysloop: EspSystemEventLoop,
-) -> Result<Box<EspWifi<'static>>> {
-    let mut esp_wifi = EspWifi::new(modem, sysloop.clone(), None)?;
-    let mut wifi = BlockingWifi::wrap(&mut esp_wifi, sysloop)?;
-
-    wifi.set_configuration(&Configuration::AccessPoint(
-        AccessPointConfiguration {
-            ssid: "RRR-wifi".into(),
-            channel: 1,
-            ..Default::default()
-        },
-    ))?;
-
-    wifi.set_configuration(&Configuration::Client(
-        ClientConfiguration {
-            ssid: SSID.into(),
-            password: PASS.into(),
-            channel: None,
-            ..Default::default()
-        },
-    ))?;
-
-    wifi.start()?;
-    info!("WIFI Start -- OK");
-    wifi.connect()?;
-    info!("WIFI Connect -- OK");
-    wifi.wait_netif_up()?;
-    let ip_info = wifi.wifi().ap_netif().get_ip_info()?;
-    info!("DHCP -- OK");
-    info!("DHCP info: {:?}", ip_info);
-    Ok(Box::new(esp_wifi))
 }
