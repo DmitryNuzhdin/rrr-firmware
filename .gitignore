@@ -7,3 +7,4 @@
 /rrr-frontend/dist/
 /.idea/
 /rrr-frontend/dist-gz/
+/rrr-api/target/

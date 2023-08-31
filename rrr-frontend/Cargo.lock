@@ -998,6 +998,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "rrr-api"
+version = "0.0.1"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "rrr-frontend"
 version = "0.0.1"
 dependencies = [
@@ -1006,6 +1013,7 @@ dependencies = [
  "heapless",
  "material-yew",
  "reqwasm",
+ "rrr-api",
  "serde",
  "serde_json",
  "wasm-bindgen",

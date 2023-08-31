@@ -53,7 +53,7 @@ async fn main() -> anyhow::Result<()> {
         copy(&mut input, &mut encoder).unwrap();
         encoder.finish().unwrap();
         ()
-    });
+    })?;
 
     LinkArgs::output_propagated("ESP_IDF")?;
     Ok(())

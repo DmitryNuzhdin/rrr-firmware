@@ -11,6 +11,8 @@ lto = true
 codegen-units = 1
 
 [dependencies]
+rrr-api = {path = "../rrr-api"}
+
 yew = { version = "0.20", features = ["csr"] }
 #yew-mdc = {git = "https://github.com/lukepfeiffer10/yew-mdc.git"}
 yew-hooks = "0.2.0"

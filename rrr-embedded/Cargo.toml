@@ -17,6 +17,8 @@ lto = true
 opt-level = "s"
 
 [dependencies]
+rrr-api = {path = "../rrr-api"}
+
 anyhow = {version = "1", features = ["backtrace"]}
 thiserror = "1"
 log = "0.4"

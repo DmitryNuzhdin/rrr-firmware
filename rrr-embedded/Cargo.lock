@@ -2930,6 +2930,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "rrr-api"
+version = "0.0.1"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "rrr-embedded"
 version = "0.0.1"
 dependencies = [
@@ -2947,6 +2954,7 @@ dependencies = [
  "include_dir",
  "log",
  "max170xx",
+ "rrr-api",
  "serde",
  "serde_json",
  "thiserror",

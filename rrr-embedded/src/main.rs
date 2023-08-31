@@ -1,11 +1,13 @@
 mod led_driver;
-mod api;
 mod ota;
 mod wifi;
 mod server;
 
 use crate::led_driver::LedDriver;
 use crate::ota::OtaDriver;
+
+use rrr_api as api;
+
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use std::thread;

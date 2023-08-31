@@ -13,14 +13,14 @@ pub struct BatteryState {
     pub charge_rate: f32,
 }
 
-#[derive(PartialEq, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct WifiConnectionConfiguration {
     pub connection_type: WifiConnectionType,
     pub ssid: String,
     pub password: String,
 }
 
-#[derive(PartialEq, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub enum WifiConnectionType {
     ConnectToExternal,
     StartAccessPoint,
@@ -39,7 +39,7 @@ pub struct PyroState {
 }
 
 
-#[derive(PartialEq, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub enum Command {
     Reset,
     SetWifi { ssid: String, password: String },

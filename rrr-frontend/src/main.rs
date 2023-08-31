@@ -1,3 +1,5 @@
+use rrr_api::*;
+
 use gloo::console::log;
 use yew::prelude::*;
 use yew_hooks::prelude::*;
@@ -57,7 +59,7 @@ fn App() -> Html {
 #[function_component]
 fn StateComponent() -> Html {
     let state = use_state_eq(|| State::default());
-    let updateRequired = use_state_eq(|| true);
+    let update_required = use_state_eq(|| true);
 
     async fn fetch_state() -> Result<State, Error> {
         fetch::<State>("http://rrr.local/state".to_string()).await
@@ -75,7 +77,7 @@ fn StateComponent() -> Html {
         }
     }
 
-    let u3 = updateRequired.clone();
+    let u3 = update_required.clone();
 
     let state2 = state.clone();
 
@@ -90,7 +92,7 @@ fn StateComponent() -> Html {
         ans2
     });
 
-    let u2 = updateRequired.clone();
+    let u2 = update_required.clone();
     if *u2 {
         async_request.run();
         u2.set(false);
@@ -108,53 +110,6 @@ fn StateComponent() -> Html {
 
 fn main() {
     yew::Renderer::<App>::new().render();
-}
-
-
-#[derive(Clone, PartialEq, Default, Serialize, Deserialize)]
-pub struct State {
-    pub battery: BatteryState,
-    pub pyro: PyroState,
-}
-
-#[derive(Clone, PartialEq, Default, Serialize, Deserialize)]
-pub struct BatteryState{
-    pub soc: f32,
-    pub voltage: f32,
-    pub charge_rate: f32,
-}
-
-#[derive(PartialEq, Serialize, Deserialize)]
-pub struct WifiConnectionConfiguration{
-    pub connection_type: WifiConnectionType,
-    pub ssid: String,
-    pub password: String,
-}
-
-#[derive(PartialEq, Serialize, Deserialize)]
-pub enum WifiConnectionType{
-    ConnectToExternal,
-    StartAccessPoint
-}
-
-#[derive(Clone, PartialEq, Default, Serialize, Deserialize)]
-pub struct PyroChannelState{
-    pub fire: bool,
-    pub test_voltage: f32,
-}
-
-#[derive(Clone, PartialEq, Default, Serialize, Deserialize)]
-pub struct PyroState{
-    pub channel1: PyroChannelState,
-    pub channel2: PyroChannelState
-}
-
-
-#[derive(Clone, PartialEq, Serialize, Deserialize)]
-pub enum Command{
-    Reset,
-    SetWifi{ssid: String, password: String},
-    SetLedColor{r: u8, g: u8, b: u8},
 }
 
 #[derive(Clone, Debug, PartialEq)]
