@@ -2,6 +2,7 @@ mod led_driver;
 mod ota;
 mod wifi;
 mod server;
+mod nvs;
 
 use crate::led_driver::LedDriver;
 use crate::ota::OtaDriver;
@@ -28,6 +29,7 @@ use esp_idf_hal::ledc;
 use esp_idf_hal::ledc::{LedcDriver, LedcTimerDriver};
 use esp_idf_hal::ledc::config::TimerConfig;
 use max170xx::Max17048;
+use rrr_api::WifiCredentials;
 use crate::api::{Command, WifiConnectionConfiguration, WifiConnectionType};
 use crate::server::Server;
 use crate::wifi::WiFi;
@@ -58,14 +60,13 @@ fn main() -> Result<()> {
         LedcTimerDriver::new(
             peripherals.ledc.timer0,
             &TimerConfig::default()
-            .frequency(50.Hz().into())
-            .resolution( ledc::Resolution::Bits14)
+                .frequency(50.Hz().into())
+                .resolution(ledc::Resolution::Bits14),
         )?;
-    let mut pwm_driver = LedcDriver::new(peripherals.ledc.channel0, timer_driver,peripherals.pins.gpio4)?;
+    let mut pwm_driver = LedcDriver::new(peripherals.ledc.channel0, timer_driver, peripherals.pins.gpio4)?;
 
     let max_duty = pwm_driver.get_max_duty();
     pwm_driver.set_duty(max_duty * 15 / 200)?;
-
 
 
     let mut max17048 = Max17048::new(i2c);
@@ -123,15 +124,40 @@ fn main() -> Result<()> {
     info!("LED -- OK");
     led_driver.set_rgb(20, 0, 0)?;
 
-    let wifi_configuration = WifiConnectionConfiguration {
-        connection_type: WifiConnectionType::ConnectToExternal,
-        ssid: SSID.into(),
-        password: PASS.into(),
+    let mut nvs = nvs::Nvs::new()?;
+
+    let nvs_arc0 = Arc::new(Mutex::new(nvs));
+    let nvs_arc1 = nvs_arc0.clone();
+
+
+    let wifi_configuration = match nvs_arc0.lock().unwrap().get_wifi_connection()? {
+        None => {
+            WifiConnectionConfiguration {
+                connection_type: WifiConnectionType::StartAccessPoint,
+                credentials: WifiCredentials {
+                    ssid: String::from("RRR-wifi-0"),
+                    password: String::from("12345678"),
+                },
+            }
+        }
+        Some(creds) => {
+            WifiConnectionConfiguration {
+                connection_type: WifiConnectionType::ConnectToExternal,
+                credentials: WifiCredentials {
+                    ssid: creds.ssid,
+                    password: creds.password,
+                },
+            }
+        }
     };
 
     #[allow(unused_variables)]
-        let wifi = WiFi::new(wifi_configuration, peripherals.modem, sysloop.clone())?;
+        let wifi = WiFi::new(wifi_configuration, peripherals.modem, sysloop.clone(), state.clone())?;
 
+    match state.lock().unwrap().wifi_state.connection_type {
+         WifiConnectionType::ConnectToExternal => led_driver.set_rgb(0, 20, 0)?,
+        _ => led_driver.set_rgb(10, 10, 0)?,
+    }
 
     #[allow(unused_variables)]
         let mut ota_driver = OtaDriver::new()?;
@@ -142,9 +168,13 @@ fn main() -> Result<()> {
     let command_handler = move |c: &Command| -> Result<()> {
         match c {
             Command::Reset => {}
-            Command::SetWifi { .. } => {}
-            Command::SetLedColor {r, g, b} =>
-                {ld.lock().unwrap().set_rgb(r.clone(), g.clone(), b.clone())?}
+            Command::SetWifi { ssid, password } => {
+                let creds = WifiCredentials { ssid: ssid.clone(), password: password.clone() };
+                nvs_arc1.lock().unwrap().set_wifi_connection(creds).unwrap();
+                nvs_arc1.lock().unwrap().get_wifi_connection().unwrap();
+            }
+            Command::SetLedColor { r, g, b } =>
+                { ld.lock().unwrap().set_rgb(r.clone(), g.clone(), b.clone())? }
             _ => {}
         }
         Ok(())

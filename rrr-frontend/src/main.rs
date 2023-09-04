@@ -7,9 +7,11 @@ use reqwasm::http::Request;
 use wasm_bindgen_futures::spawn_local;
 use serde::{Serialize, Deserialize};
 use serde::de::DeserializeOwned;
-use material_yew::MatButton;
+use material_yew::*;
 
 use gloo::timers::callback::{Timeout};
+use wasm_bindgen::JsCast;
+use web_sys::HtmlInputElement;
 
 #[derive(Properties, PartialEq)]
 struct RestButtonProps {
@@ -39,18 +41,49 @@ fn RestButton(props: &RestButtonProps) -> Html {
     html! {<span {onclick}><MatButton label={text}/></span>}
 }
 
+static command_uri: &str = "http://rrr.local/command";
+
+fn send_command(command: Command) {
+    spawn_local(async move {
+        Request::post(command_uri)
+            .body(serde_json::to_string(&command).unwrap())
+            .send()
+            .await
+            .unwrap();
+    });
+}
+
+#[function_component]
+fn WifiSettings() -> Html {
+    let ssid = use_state(||String::new());
+    let password = use_state(||String::new());
+
+    let ssid1 = ssid.clone();
+    let password1 = password.clone();
+    let onclick = move |_| {
+        let cmd = Command::SetWifi {ssid: (*ssid1).clone(), password: (*password1).clone()};
+        send_command(cmd);
+    };
+
+    // let oninput = |s: String| {log!(s)};
+
+    html! { <div>
+                <MatTextField label="ssid" value={(*ssid).clone()} oninput={move |s:String| {ssid.set(s)}}/>
+                <MatTextField label="password" value={(*password).clone()} oninput={move |s:String| {password.set(s)}}/>
+                <span {onclick}><MatButton label="Set wifi"/></span>
+        </div>
+    }
+}
+
 #[function_component]
 fn App() -> Html {
     html! {
         <div>
-            <div>
-                <RestButton text="BLUE" command={Command::SetLedColor {r: 0, g: 0, b: 20}}/>
-                <RestButton text="RED" command={Command::SetLedColor {r: 20, g: 0, b: 0}}/>
-                <RestButton text="GREEN" command={Command::SetLedColor {r: 0, g: 20, b: 0}}/>
-            </div>
-            <div>
-                <StateComponent/>
-            </div>
+            <StateComponent/>
+            <RestButton text="BLUE" command={Command::SetLedColor {r: 0, g: 0, b: 20}}/>
+            <RestButton text="RED" command={Command::SetLedColor {r: 20, g: 0, b: 0}}/>
+            <RestButton text="GREEN" command={Command::SetLedColor {r: 0, g: 20, b: 0}}/>
+            <WifiSettings/>
         </div>
     }
 }
@@ -84,7 +117,7 @@ fn StateComponent() -> Html {
     let async_request: UseAsyncHandle<State, Error> = use_async(async move {
         let ans = fetch_state().await;
         let ans2 = ans.clone();
-        if ans.is_ok() {state2.set(ans.unwrap())};
+        if ans.is_ok() { state2.set(ans.unwrap()) };
         Timeout::new(1000, move || {
             log!("request");
             u3.set(true);
