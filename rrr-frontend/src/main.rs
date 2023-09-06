@@ -1,3 +1,8 @@
+mod components;
+
+use crate::components::*;
+
+use std::process::Child;
 use rrr_api::*;
 
 use gloo::console::log;
@@ -17,6 +22,8 @@ use web_sys::HtmlInputElement;
 struct RestButtonProps {
     text: String,
     command: Command,
+    #[prop_or_default]
+    equal_size: bool,
 }
 
 #[function_component]
@@ -38,7 +45,7 @@ fn RestButton(props: &RestButtonProps) -> Html {
         ()
     });
 
-    html! {<span {onclick}><MatButton label={text}/></span>}
+    html! {<span class={if props.equal_size {"equal-size"} else {""}} {onclick}><MatButton label={text} outlined=true/></span>}
 }
 
 static command_uri: &str = "http://rrr.local/command";
@@ -55,39 +62,58 @@ fn send_command(command: Command) {
 
 #[function_component]
 fn WifiSettings() -> Html {
-    let ssid = use_state(||String::new());
-    let password = use_state(||String::new());
+    let ssid = use_state(|| String::new());
+    let password = use_state(|| String::new());
 
     let ssid1 = ssid.clone();
     let password1 = password.clone();
     let onclick = move |_| {
-        let cmd = Command::SetWifi {ssid: (*ssid1).clone(), password: (*password1).clone()};
+        let cmd = Command::SetWifi { ssid: (*ssid1).clone(), password: (*password1).clone() };
         send_command(cmd);
     };
-
-    // let oninput = |s: String| {log!(s)};
 
     html! { <div>
                 <MatTextField label="ssid" value={(*ssid).clone()} oninput={move |s:String| {ssid.set(s)}}/>
                 <MatTextField label="password" value={(*password).clone()} oninput={move |s:String| {password.set(s)}}/>
-                <span {onclick}><MatButton label="Set wifi"/></span>
+                <span {onclick}><MatButton label="Set wifi" outlined=true/></span>
         </div>
     }
 }
 
 #[function_component]
 fn App() -> Html {
+    let current_tab = use_state(|| 0);
+
+    let current_tab_ = current_tab.clone();
+    let onactivated = move |current_id: usize| { current_tab_.set(current_id) };
+
     html! {
-        <div>
-            <StateComponent/>
-            <RestButton text="BLUE" command={Command::SetLedColor {r: 0, g: 0, b: 20}}/>
-            <RestButton text="RED" command={Command::SetLedColor {r: 20, g: 0, b: 0}}/>
-            <RestButton text="GREEN" command={Command::SetLedColor {r: 0, g: 20, b: 0}}/>
-            <WifiSettings/>
+        <div class={classes!("content-frame")}>
+            <div class={classes!("content-root")}>
+                <MatTabBar {onactivated}>
+                    <MatTab min_width=true icon="dashboard"/>
+                    <MatTab min_width=true icon="bolt"/>
+                    <MatTab min_width=true icon="settings"/>
+                </MatTabBar>
+                <TabPage id=0 current_id={*current_tab}>
+                    <StateComponent/>
+                </TabPage>
+                <TabPage id=1 current_id={*current_tab}>
+                    <Card title="leds" icon="wb_twilight">
+                        <HorizontalLayout>
+                            <RestButton equal_size=true text="BLUE" command={Command::SetLedColor {r: 0, g: 0, b: 20}}/>
+                            <RestButton equal_size=true text="RED" command={Command::SetLedColor {r: 20, g: 0, b: 0}}/>
+                            <RestButton equal_size=true text="GREEN" command={Command::SetLedColor {r: 0, g: 20, b: 0}}/>
+                        </HorizontalLayout>
+                    </Card>
+                </TabPage>
+                <TabPage id=2 current_id={*current_tab}>
+                    <WifiSettings/>
+                </TabPage>
+            </div>
         </div>
     }
 }
-
 
 #[function_component]
 fn StateComponent() -> Html {
@@ -131,12 +157,68 @@ fn StateComponent() -> Html {
         u2.set(false);
     }
 
+    let battery_icon = match state.battery.soc {
+        x if x < 0.1 => "battery_0_bar",
+        x if x < 0.233 => "battery_1_bar",
+        x if x < 0.366 => "battery_2_bar",
+        x if x < 0.50 => "battery_3_bar",
+        x if x < 0.633 => "battery_4_bar",
+        x if x < 0.766 => "battery_5_bar",
+        x if x <= 0.90 => "battery_6_bar",
+        x if x > 0.90 => "battery_full",
+        _ => "battery_unknown",
+    };
+
+    fn pyro_status(pyro: &PyroChannelState) -> &'static str {
+        match pyro {
+            PyroChannelState { fire: true, test_voltage: _ } => { "active!!!" }
+            PyroChannelState { fire: false, test_voltage: tv } if *tv > 1.0f32 => { "connected" }
+            _ => { "not connected" }
+        }
+    }
+
     html! {
-        <div>
-            <div>{format!("Battery charge: {:.2}%", state.battery.soc )}</div>
-            <div>{format!("Battery voltage: {:.2}V", state.battery.voltage)}</div>
-            <div>{format!("Battery charge rate: {:.2}%/hr", state.battery.charge_rate)}</div>
-            <div>{format!("Pyro 1 test voltage: {:.2}V", state.pyro.channel1.test_voltage)}</div>
+        <div class="state">
+            <Card title="battery" icon={battery_icon}>
+                <HorizontalLayout>
+                    <span class="first-column"><VerticalLayout>
+                        <div>{"Battery charge"}</div>
+                        <div>{"Battery voltage"}</div>
+                        <div>{"Battery charge rate"}</div>
+                    </VerticalLayout></span>
+                    <VerticalLayout>
+                        <div>{format!("{:.0}", state.battery.soc)}</div>
+                        <div>{format!("{:.2}", state.battery.voltage)}</div>
+                        <div>{format!("{:.1}", state.battery.charge_rate)}</div>
+                    </VerticalLayout>
+                    <div class="separator"/>
+                    <VerticalLayout>
+                        <div>{"%"}</div>
+                        <div>{"V"}</div>
+                        <div>{"%/hr"}</div>
+                    </VerticalLayout>
+                </HorizontalLayout>
+            </Card>
+            <Card title="pyro" icon="flare">
+                <HorizontalLayout>
+                    <span class="first-column"><VerticalLayout>
+                        <div>{"channel 1"}</div>
+                        <div>{"channel 2"}</div>
+                    </VerticalLayout></span>
+                    <VerticalLayout>
+                        <div>{pyro_status(&state.pyro.channel1)}</div>
+                        <div>{pyro_status(&state.pyro.channel2)}</div>
+                    </VerticalLayout>
+                </HorizontalLayout>
+            </Card>
+            <Card title="barometer" icon="speed">
+                <HorizontalLayout>
+                    <div class="first-column">{"altitude"}</div>
+                    <div>{"136.22"}</div>
+                    <div class="separator"/>
+                    <div>{"m"}</div>
+                </HorizontalLayout>
+            </Card>
         </div>
     }
 }

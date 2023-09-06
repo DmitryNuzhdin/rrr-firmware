@@ -1,0 +1,88 @@
+html,
+body {
+    height: 100%;
+    margin: 0;
+    font-size: 16px;
+    font-family: Roboto, sans-serif;
+    overflow: hidden;
+    text-transform: uppercase;
+    font-weight: 500;
+}
+
+html {
+  #--mdc-theme-primary: fuchsia;
+  --mdc-tab-horizontal-padding: 12px;
+}
+
+.content-frame {
+    display: flex;
+    height: 100%;
+    width: 100%;
+    justify-content: space-around;
+}
+
+.content-root {
+    display: flex;
+    height: 100%;
+    width: 100%;
+    max-width: 500px;
+    flex-direction: column;
+}
+
+.tab-page {
+    margin-top: 10px;
+}
+
+.horizontal-layout {
+    display: flex;
+    flex-direction: row;
+}
+
+.vertical-layout {
+    display: flex;
+    flex-direction: column;
+}
+
+.equal-size {
+    flex: 1 1 0px;
+}
+
+mwc-button {
+    width: 100%;
+}
+
+.card {
+    display: flex;
+    justify-content: flex-start;
+    flex-direction: column;
+    margin: 5px;
+    border: 2px solid #CCC;
+    border-radius: 10px;
+    padding: 0px 20px 10px 20px;
+}
+
+.card .header {
+    display: flex;
+    justify-content: flex-start;
+    align-item: center;
+}
+
+.card .header mwc-icon {
+    font-size: 50px;
+    align-self: center;
+    margin: 0px 15px 0px 0px;
+}
+
+.card-content {
+    font-weight: 400;
+}
+
+.horizontal-layout .separator {
+    margin-left: 20px;
+}
+
+/* content-specific */
+
+.card-content .first-column {
+    width: 60%;
+}

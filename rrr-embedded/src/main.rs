@@ -114,7 +114,7 @@ fn main() -> Result<()> {
             let adc_reading = adc_driver.read(&mut adc_channel_driver).unwrap();
             let voltage = adc_reading as f32;
             let mut state = state2.lock().unwrap();
-            state.pyro.channel1.test_voltage = voltage;
+            state.pyro.channel1.test_voltage = voltage / 1000f32;
         }
     });
 
