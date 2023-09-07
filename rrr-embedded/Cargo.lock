@@ -425,6 +425,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "bmp280-ehal"
+version = "0.0.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "df84efaebbc96a6ff76eb7ff07622ce3ba36b0518576e68245771369bab0cb77"
+dependencies = [
+ "embedded-hal 0.2.7",
+]
+
+[[package]]
 name = "bstr"
 version = "1.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2948,6 +2957,7 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "async-std",
+ "bmp280-ehal",
  "embedded-hal 0.2.7",
  "embedded-io",
  "embedded-svc",
@@ -2964,6 +2974,7 @@ dependencies = [
  "rrr-api",
  "serde",
  "serde_json",
+ "shared-bus",
  "thiserror",
  "tokio",
  "trunk-build-time",
@@ -3223,6 +3234,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "900fba806f70c630b0a382d0d825e17a0f19fcd059a2ade1ff237bcddf446b31"
 dependencies = [
  "lazy_static",
+]
+
+[[package]]
+name = "shared-bus"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8bb5650c146f3186332c5da30ff542f7d1ff0c2410346cd861f34fa836dc0d84"
+dependencies = [
+ "embedded-hal 0.2.7",
+ "nb 1.1.0",
+ "once_cell",
 ]
 
 [[package]]

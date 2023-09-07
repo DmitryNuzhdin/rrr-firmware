@@ -35,6 +35,8 @@ ws2812-esp32-rmt-driver = "0.6.0"
 serde = "1.0.185"
 serde_json = "1.0.105"
 max170xx = "0.1.0"
+bmp280-ehal = "0.0.6"
+shared-bus = { version="0.3.0", features = ["std"]}
 
 include_dir = "0.7.3"
 map_for = "0.3.0"

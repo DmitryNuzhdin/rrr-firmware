@@ -177,6 +177,13 @@ fn StateComponent() -> Html {
         }
     }
 
+    fn servo_state(servo: &Option<f32>) -> String {
+        match servo {
+            None => String::from("off"),
+            Some(a) => format!("{:.4}", a),
+        }
+    }
+
     html! {
         <div class="state">
             <Card title="battery" icon={battery_icon}>
@@ -213,10 +220,31 @@ fn StateComponent() -> Html {
             </Card>
             <Card title="barometer" icon="speed">
                 <HorizontalLayout>
-                    <div class="first-column">{"altitude"}</div>
-                    <div>{"136.22"}</div>
+                    <span class="first-column"><VerticalLayout>
+                        <div>{"Altitude"}</div>
+                        <div>{"temperature"}</div>
+                    </VerticalLayout></span>
+                    <VerticalLayout>
+                        <div>{format!("{:.1}", state.barometer.altitude)}</div>
+                        <div>{format!("{:.1}", state.barometer.temperature)}</div>
+                    </VerticalLayout>
                     <div class="separator"/>
-                    <div>{"m"}</div>
+                    <VerticalLayout>
+                        <div>{"M"}</div>
+                        <div>{"°C"}</div>
+                    </VerticalLayout>
+                </HorizontalLayout>
+            </Card>
+            <Card title="servo" icon="open_with">
+                <HorizontalLayout>
+                    <span class="first-column"><VerticalLayout>
+                        <div>{"servo 1"}</div>
+                        <div>{"servo 2"}</div>
+                    </VerticalLayout></span>
+                    <VerticalLayout>
+                        <div>{servo_state(&state.servo.servo1_duty)}</div>
+                        <div>{servo_state(&state.servo.servo2_duty)}</div>
+                    </VerticalLayout>
                 </HorizontalLayout>
             </Card>
         </div>

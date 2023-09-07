@@ -25,9 +25,11 @@ use esp_idf_svc::wifi::*;
 use esp_idf_hal::peripheral::Peripheral;
 use esp_idf_hal::prelude::*;
 use esp_idf_hal::gpio::{Gpio1};
+use esp_idf_hal::i2c::I2cDriver;
 use esp_idf_hal::ledc;
 use esp_idf_hal::ledc::{LedcDriver, LedcTimerDriver};
 use esp_idf_hal::ledc::config::TimerConfig;
+use esp_idf_sys::esp_intr_disable;
 use max170xx::Max17048;
 use rrr_api::WifiCredentials;
 use crate::api::{Command, WifiConnectionConfiguration, WifiConnectionType};
@@ -53,6 +55,9 @@ fn main() -> Result<()> {
         &esp_idf_hal::i2c::I2cConfig::default(),
     )?;
 
+    let shared_i2c = shared_bus::new_std!(I2cDriver = i2c).unwrap();
+
+
     let _pyro = esp_idf_hal::gpio::PinDriver::output(peripherals.pins.gpio6)?;
 
 
@@ -69,7 +74,7 @@ fn main() -> Result<()> {
     pwm_driver.set_duty(max_duty * 15 / 200)?;
 
 
-    let mut max17048 = Max17048::new(i2c);
+    let mut max17048 = Max17048::new(shared_i2c.acquire_i2c());
 
     max17048.version().unwrap();
     info!("SOC: {:.2}", max17048.soc().unwrap());
@@ -98,6 +103,28 @@ fn main() -> Result<()> {
             state.battery.charge_rate = max.charge_rate().unwrap();
         }
     });
+
+    let bmp280 = bmp280_ehal::BMP280::new(shared_i2c.acquire_i2c())?;
+    let bmp280 = Arc::new(Mutex::new(bmp280));
+
+    let state_ = state.clone();
+
+    thread::spawn(move || {
+        loop {
+            thread::sleep(Duration::from_millis(1000));
+            let mut bmp280 = bmp280.lock().unwrap();
+            let temperature: f32  = bmp280.temp() as f32;
+            let p0 = 101325f32;
+            let pressure: f32 = bmp280.pressure_one_shot() as f32;
+            //-44330f32 * (1f32 - f32::powf  (pressure / 101325f32).po powf(1f32/5.255f32));
+            let altitude: f32 = -8435.775 * (pressure / p0 - 1f32);
+            let mut state = state_.lock().unwrap();
+            state.barometer.temperature = temperature;
+            state.barometer.altitude = altitude;
+        }
+    });
+
+
 
     let mut adc_driver_config = esp_idf_hal::adc::AdcConfig::default();
     adc_driver_config.resolution = Resolution::Resolution12Bit;
@@ -150,6 +177,8 @@ fn main() -> Result<()> {
             }
         }
     };
+
+    info!("wifi config {:?}", wifi_configuration);
 
     #[allow(unused_variables)]
         let wifi = WiFi::new(wifi_configuration, peripherals.modem, sysloop.clone(), state.clone())?;
