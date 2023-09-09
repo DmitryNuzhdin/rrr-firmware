@@ -5,6 +5,7 @@ body {
     font-size: 16px;
     font-family: Roboto, sans-serif;
     overflow: hidden;
+    /* TODO: fix for text fields */
     text-transform: uppercase;
     font-weight: 500;
 }
@@ -19,6 +20,7 @@ html {
     height: 100%;
     width: 100%;
     justify-content: space-around;
+    overflow: auto;
 }
 
 .content-root {
@@ -26,16 +28,19 @@ html {
     height: 100%;
     width: 100%;
     max-width: 500px;
+    min-width: 374px;
     flex-direction: column;
 }
 
 .tab-page {
     margin-top: 10px;
+    overflow: auto;
 }
 
 .horizontal-layout {
     display: flex;
     flex-direction: row;
+    align-items: center;
 }
 
 .vertical-layout {

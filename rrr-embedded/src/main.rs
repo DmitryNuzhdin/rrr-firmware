@@ -36,8 +36,7 @@ use crate::api::{Command, WifiConnectionConfiguration, WifiConnectionType};
 use crate::server::Server;
 use crate::wifi::WiFi;
 
-static SSID: &str = include_str!("../wifi-ssid.secret");
-static PASS: &str = include_str!("../wifi-password.secret");
+const BMP_280_FILTER_GAIN: f32 = 0.05f32;
 
 fn main() -> Result<()> {
     esp_idf_sys::link_patches();
@@ -68,10 +67,11 @@ fn main() -> Result<()> {
                 .frequency(50.Hz().into())
                 .resolution(ledc::Resolution::Bits14),
         )?;
-    let mut pwm_driver = LedcDriver::new(peripherals.ledc.channel0, timer_driver, peripherals.pins.gpio4)?;
 
-    let max_duty = pwm_driver.get_max_duty();
-    pwm_driver.set_duty(max_duty * 15 / 200)?;
+    let mut pwm_driver_1 = LedcDriver::new(peripherals.ledc.channel0, &timer_driver , peripherals.pins.gpio4)?;
+    let mut pwm_driver_2 = LedcDriver::new(peripherals.ledc.channel1, &timer_driver, peripherals.pins.gpio5)?;
+
+    let mut pwm = Arc::new(Mutex::new((pwm_driver_1, pwm_driver_2)));
 
 
     let mut max17048 = Max17048::new(shared_i2c.acquire_i2c());
@@ -111,7 +111,7 @@ fn main() -> Result<()> {
 
     thread::spawn(move || {
         loop {
-            thread::sleep(Duration::from_millis(1000));
+            thread::sleep(Duration::from_millis(20));
             let mut bmp280 = bmp280.lock().unwrap();
             let temperature: f32  = bmp280.temp() as f32;
             let p0 = 101325f32;
@@ -119,8 +119,10 @@ fn main() -> Result<()> {
             //-44330f32 * (1f32 - f32::powf  (pressure / 101325f32).po powf(1f32/5.255f32));
             let altitude: f32 = -8435.775 * (pressure / p0 - 1f32);
             let mut state = state_.lock().unwrap();
+            let new_altitude = state.barometer.altitude +
+                (altitude - state.barometer.altitude) * BMP_280_FILTER_GAIN;
             state.barometer.temperature = temperature;
-            state.barometer.altitude = altitude;
+            state.barometer.altitude = new_altitude;
         }
     });
 
@@ -194,6 +196,8 @@ fn main() -> Result<()> {
 
     let ld = Arc::new(Mutex::new(led_driver));
 
+    let state_ = state.clone();
+
     let command_handler = move |c: &Command| -> Result<()> {
         match c {
             Command::Reset => {}
@@ -204,6 +208,28 @@ fn main() -> Result<()> {
             }
             Command::SetLedColor { r, g, b } =>
                 { ld.lock().unwrap().set_rgb(r.clone(), g.clone(), b.clone())? }
+            Command::SetPwmDutyCycle {duty_1, duty_2} =>
+                {
+                    info!("setting pwm");
+                    fn duty_opt_to_servo_duty(d: &Option<f32>, max_duty: u32) -> u32 {
+                        match d {
+                            None => {0}
+                            Some(i) => {(max_duty as f32  * (10f32 * (i + 1f32)) / 200f32) as u32}
+                        }
+                    }
+
+                    let mut pwm = pwm.lock().unwrap();
+                    let d = duty_opt_to_servo_duty(duty_1, pwm.0.get_max_duty());
+                    pwm.0.set_duty(d)?;
+                    info!("d1: {}", d);
+                    let d = duty_opt_to_servo_duty(duty_2, pwm.1.get_max_duty());
+                    pwm.1.set_duty(d)?;
+                    info!("d2: {}", d);
+                    let mut state = state_.lock().unwrap();
+                    state.servo.servo1_duty = *duty_1;
+                    state.servo.servo2_duty = *duty_2;
+                }
+
             _ => {}
         }
         Ok(())

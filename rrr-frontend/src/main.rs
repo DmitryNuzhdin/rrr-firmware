@@ -13,9 +13,11 @@ use wasm_bindgen_futures::spawn_local;
 use serde::{Serialize, Deserialize};
 use serde::de::DeserializeOwned;
 use material_yew::*;
+use material_yew::text_inputs::TextFieldType;
 
 use gloo::timers::callback::{Timeout};
 use wasm_bindgen::JsCast;
+use web_sys::console::log;
 use web_sys::HtmlInputElement;
 
 #[derive(Properties, PartialEq)]
@@ -105,6 +107,9 @@ fn App() -> Html {
                             <RestButton equal_size=true text="RED" command={Command::SetLedColor {r: 20, g: 0, b: 0}}/>
                             <RestButton equal_size=true text="GREEN" command={Command::SetLedColor {r: 0, g: 20, b: 0}}/>
                         </HorizontalLayout>
+                    </Card>
+                    <Card title="servo" icon="open_with">
+                        <ServoComponent/>
                     </Card>
                 </TabPage>
                 <TabPage id=2 current_id={*current_tab}>
@@ -248,6 +253,64 @@ fn StateComponent() -> Html {
                 </HorizontalLayout>
             </Card>
         </div>
+    }
+}
+
+#[function_component]
+fn ServoComponent() -> Html {
+    let duty1_enabled = use_state(|| false);
+    let duty2_enabled = use_state(|| false);
+
+    let duty1 = use_state(|| 0i32);
+    let duty2 = use_state(|| 0i32);
+
+    fn str_to_f32(s: String) -> Option<i32> {
+        if s.is_empty() {None} else
+        {
+            log!("parsing");
+            s.parse::<i32>().ok().filter(|i| {(*i >= 0 && *i <= 100)}).or_else(|| {Some(0)})
+        }
+    }
+
+    let duty1_enabled_ = duty1_enabled.clone();
+    let duty2_enabled_ = duty2_enabled.clone();
+    let duty1_ = duty1.clone();
+    let duty2_ = duty2.clone();
+
+    let submit = move |_| {
+        let duty_1 = if (*duty1_enabled_)
+            {Some(((*duty1_) as f32) * 0.01f32)} else {None};
+
+        let duty_2 = if (*duty2_enabled_)
+        {Some(((*duty2_) as f32) * 0.01f32)} else {None};
+
+        let command = Command::SetPwmDutyCycle {duty_1, duty_2};
+        send_command(command);
+    };
+
+    html! {
+        <HorizontalLayout>
+            <VerticalLayout>
+                <HorizontalLayout>
+                    <div>{"servo 1"}</div>
+                    <MatCheckbox checked={*duty1_enabled} onchange={move |b| {duty1_enabled.set(b);}}/>
+                    <MatTextField outlined=true field_type={TextFieldType::Number} min="0" max="100"
+                        value={format!("{}", (*duty1).clone())}
+                        oninput={move |s| {str_to_f32(s).iter().for_each(|i| {log!(format!("setting {}", i));duty1.set(*i);}) }}
+                    />
+                </HorizontalLayout>
+                <HorizontalLayout>
+                    <div>{"servo 2"}</div>
+                    <MatCheckbox checked={*duty2_enabled} onchange={move |b| {duty2_enabled.set(b);}}/>
+                    <MatTextField outlined=true field_type={TextFieldType::Number} min="0" max="100"
+                        value={format!("{}", *duty2)}
+                        oninput={move |s| {str_to_f32(s).iter().for_each(|i| {log!(format!("setting {}", i));duty2.set(*i);}) }}
+                    />
+                </HorizontalLayout>
+            </VerticalLayout>
+            <div class="separator"/>
+            <span class="" onclick={submit}><MatButton label="submit" outlined=true/></span>
+        </HorizontalLayout>
     }
 }
 

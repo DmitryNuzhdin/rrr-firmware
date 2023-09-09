@@ -69,5 +69,5 @@ pub enum Command {
     SetWifi { ssid: String, password: String },
     ResetNvs,
     SetLedColor { r: u8, g: u8, b: u8 },
-    SetPwmDutyCycle { duty_cycle: f32 },
+    SetPwmDutyCycle { duty_1: Option<f32>, duty_2: Option<f32> },
 }
