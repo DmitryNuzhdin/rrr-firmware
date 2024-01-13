@@ -2,18 +2,24 @@ use bevy::core_pipeline::bloom::BloomSettings;
 use bevy::core_pipeline::tonemapping::Tonemapping;
 use bevy::pbr::DirectionalLightShadowMap;
 use bevy::prelude::*;
-use crate::visual_objects::spawn_all_entities;
+use crate::visual_objects::{Rocket3DObject, spawn_all_entities};
+use std::thread;
+use std::sync::mpsc::channel;
+
 
 mod simulation;
 mod visual_objects;
 mod cone;
 
 fn main() {
+    let (tx, rx) = channel::<f32>();
+
     App::new()
         .insert_resource(Msaa::Sample8)
         .insert_resource(DirectionalLightShadowMap { size: 4096 })
         .add_plugins(DefaultPlugins)
         .add_systems(Startup, setup)
+        .add_systems(Update, update)
         .run();
 }
 
@@ -70,4 +76,13 @@ fn setup(
     spawn_all_entities(
         &mut commands, &mut meshes, &mut materials,
     );
+}
+
+pub fn update(
+    time: Res<Time>,
+    mut camera: Query<&mut Transform, (With<Camera>, Without<Rocket3DObject>)>,
+    mut rocket_3d_objects: Query<(&mut Transform, &mut Visibility, &Rocket3DObject), Without<Camera>>,
+    mut gizmos: Gizmos,
+) {
+
 }

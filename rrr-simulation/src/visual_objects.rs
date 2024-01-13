@@ -5,7 +5,7 @@ use bevy::prelude::Visibility::*;
 use crate::cone::Cone;
 
 #[derive(Component, Clone, PartialEq)]
-struct Rocket3DObject;
+pub struct Rocket3DObject;
 
 pub fn emissive_material(color: Color, emissive: Color) -> StandardMaterial  {
     StandardMaterial{
